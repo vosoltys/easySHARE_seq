@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#$ -pe parallel 5
+#$ -l h_vmem=8G
+#$ -N Full_Demux
+#$ -o ./Full_Demux_SHARE.out.txt
+#$ -j y
+#$ -S /bin/bash
+#$ -cwd
+
+if [ ! -e "/tmp/vsoltys" ];then mkdir /tmp/vsoltys;fi
+#Has to be started from congo, not cluster
+#Requirements: in main directory folder /fastqs with the undetermined fastqs (4 of them!)
+#usage: ./Full... BASENAME_INPUT_FILE MAIN_DIRECTORY
+#example: ./Full_demultiplex_SHARE.sh Test.Undetermined_S0_L002 /fml/chones/projects/PC060_scCREs/Scripts/Work_in_progress
+
+input_file=$1;
+echo "Input files are : "$input_file
+main_dir=$2;
+echo "Main directory is: "$main_dir
+fbname=$(basename $input_file Undetermined_S0_L001)
+echo "Current user is "$USER
+#First is splitting input Undetermined fastqs into chunks of 2M
+
+echo "Splitting files..."
+
+mkdir $main_dir/split
+
+cp /fml/chones/projects/PC060_scCREs/Scripts/split.sh $main_dir
+qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_R1_001.fastq.gz" $main_dir/split/$fbname"_R1_001.fastq.gz_"
+qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_R2_001.fastq.gz" $main_dir/split/$fbname"_R2_001.fastq.gz_"
+qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_I1_001.fastq.gz" $main_dir/split/$fbname"_I1_001.fastq.gz_"
+qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_I2_001.fastq.gz" $main_dir/split/$fbname"_I2_001.fastq.gz_"
+
+cluster_act=$(qstat -u $USER);
+until [[ "$cluster_act" == "" ]]; do echo "Waiting for cluster job to finish.."; sleep 50; cluster_act=$(qstat -u $USER); done
+echo "Splitting done, starting to zip them...";
