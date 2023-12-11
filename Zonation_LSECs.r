@@ -80,7 +80,6 @@ DefaultAssay(Liver_subset) <- "ATAC"
 atac_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
 data <- Liver_subset@assays$ATAC@data
 
-#check peak in list pf peaks , e.g. cat B6_PWD_Liver.peaks_peaks.narrowPeak | grep chr6 | awk '{if ($2 > 17980000) print $0}' | head
 wnt2_end <- as.numeric(unlist(data["chr6-17991462-17991911",]))
 wnt2_prom_1 <- as.numeric(unlist(data["chr6-18030331-18030585",]))
 wnt2_prom_2 <- as.numeric(unlist(data["chr6-18031261-18032326",]))
