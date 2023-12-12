@@ -1,7 +1,6 @@
 library(Seurat)
 library(Signac)
 library(dplyr)
-library(GenomicRanges)
 library(rtracklayer)
 library(SeuratWrappers)
 library(Matrix)
@@ -12,12 +11,8 @@ library(gridExtra)
 library(tidyverse)
 library(future)
 library(gprofiler2)
-library(gridExtra)
-library(SummarizedExperiment)
-library(chromVAR)
 library(matrixStats)
 library(ChIPpeakAnno)
-library(BSDA)
 
 load("Liver_WNN_broad_annotated.RObject") 
 Liver_subset <- subset(Liver_WNN_broad, subset= CellType =="LSECs")
@@ -141,6 +136,281 @@ atac_binned_mean <- atac_coords %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, labe
 ggplot(rna_binned_mean,aes(x=as.integer(Bins), y=m_wnt2)) + geom_point() + theme_classic() + ggtitle("Wnt2") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Mean Expression") + geom_line() + geom_smooth(aes(x=as.integer(Bins),y=m_wnt2,color=m_wnt2,fill=m_wnt2),method=loess) + theme(legend.position="none")
 ggplot(atac_binned_mean,aes(x=Bins, y=m_wnt2_end)) + geom_point() + theme_classic() + ggtitle("Wnt2_int") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Mean Accessibility") + geom_line() + geom_smooth(aes(x=as.integer(Bins),y=m_wnt2_end,color="red",fill=m_wnt2_end),method=loess)+ theme(legend.position="none")
 
+
+
+
+## Identification of novel marker genes
+
+rna_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+data <- Liver_subset@assays$RNA@data
+data <- cbind(rna_coords, t(data))
+data <- data %>% dplyr::filter(wnnUMAP_1 > 5 )
+data <- data[order(data$wnnUMAP_2),]
+#bin data and calculate mean per bin across every gene
+data <- data %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+
+## Pericentral
+#filter out genes with low expression (maximum mean < 0.25)
+index_keep <- c()
+for (i in 1:length(data)) {
+    if (max(data[,i]) < 0.25) {
+        next
+    } else {
+        index_keep <- append(index_keep,i)
+    }}
+int_data <- data[,index_keep]
+
+#require mean(bin9+10) < mean(bin1+2)
+index_keep <- c()
+for (i in 1:length(int_data)) {
+    if (((int_data[1,i] + int_data[2,i])/2) > ((int_data[9,i] + int_data[10,i])/2)){
+        index_keep <- c(index_keep,i)
+    }}
+int_data <- int_data[,index_keep]
+
+#Calculate moving average & require decrease every time with 2 exceptions
+library(zoo)
+mov_avg <- rollmeanr(int_data,3)
+index_keep <- c()
+
+for (i in 1:ncol(mov_avg)){
+    for (x in 1:8){
+        #if first bin, set avg value
+        if (x == 1){ 
+            avg <- mov_avg[x,i]
+            exceptions <-  1
+        if (exceptions < 0) {break}
+        #if not, check if moving average decreases. If it doesn't, substract from exception    
+        } else {
+            if (avg > mov_avg[x,i]){
+                avg <- mov_avg[x,i]
+                next
+            } else {
+                avg <- mov_avg[x,i]
+                exceptions <- exceptions -1
+            }
+        }
+    }
+    if (exceptions < 0) { 
+        next
+    } else {
+        index_keep <- c(index_keep, i)
+}}
+int_data <- int_data[,index_keep]
+
+#Divide each column by its maximum to have values from 1 to zero
+for (i in 1:length(int_data)) {
+    int_data[,i] <- int_data[,i] / max(int_data[,i])}
+int_data$Bins <- c(1:10)
+rna_pericentral_data <- int_data 
+
+## Periportal
+#filter out genes with low expression (maximum mean < 0.25)
+index_keep <- c()
+for (i in 1:length(data)) {
+    if (max(data[,i]) < 0.25) {
+        next
+    } else {
+        index_keep <- append(index_keep,i)
+    }}
+int_data <- data[,index_keep]
+
+#require mean(bin9+10) > mean(bin1+2)
+index_keep <- c()
+for (i in 1:length(int_data)) {
+    if (((int_data[1,i] + int_data[2,i])/2) < ((int_data[9,i] + int_data[10,i])/2)){
+        index_keep <- c(index_keep,i)
+    }}
+int_data <- int_data[,index_keep]
+
+#Calculate moving average & require decrease every time with 2 exceptions
+library(zoo)
+mov_avg <- rollmeanr(int_data,3)
+index_keep <- c()
+
+for (i in 1:ncol(mov_avg)){
+    for (x in 1:8){
+        #if first bin, set avg value
+        if (x == 1){ 
+            avg <- mov_avg[x,i]
+            exceptions <-  2
+        if (exceptions < 0) {break}
+        #if not, check if moving average increases If it doesn't, substract from exception    
+        } else {
+            if (avg < mov_avg[x,i]){
+                avg <- mov_avg[x,i]
+                next
+            } else {
+                avg <- mov_avg[x,i]
+                exceptions <- exceptions -1
+            }
+        }
+    }
+    if (exceptions < 0) { 
+        next
+    } else {
+        index_keep <- c(index_keep, i)
+}}
+int_data <- int_data[,index_keep]
+
+#Divide each column by its maximum to have values from 1 to zero
+for (i in 1:ncol(int_data)) {
+    int_data[,i] <- int_data[,i] / max(int_data[,i])}
+int_data <- int_data[-c(2)]
+rna_periportal_data <- int_data 
+
+## Identification of cis-elements displaying zonation
+
+DefaultAssay(Liver_subset) <- "ATAC"
+atac_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+datax <- as.data.frame(Liver_subset@assays$ATAC@data)
+datax <- cbind(atac_coords, t(datax))
+datax <- datax %>% dplyr::filter(wnnUMAP_1 > 5 )
+
+#filter out peaks with no data
+index_keep <- c()
+for (i in 1:ncol(datax)){
+    if (i ==2) {
+        index_keep <- c(index_keep,i)
+    } else if (sum(datax[,i]) > 25) {
+        index_keep <- c(index_keep,i)
+    }
+}
+datax <- datax[,index_keep]
+datax <- datax[order(datax$wnnUMAP_2),]
+
+#bin data and calculate mean per bin across every peak
+datax <- datax %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE))
+#split up makes it quicker...
+da_1 <- datax[,c(1:10000,58716)]
+da_2 <- datax[,c(10001:20000,58716)]
+da_3 <- datax[,c(20001:30000,58716)]
+da_4 <- datax[,c(30001:40000,58716)]
+da_5 <- datax[,c(40001:50000,58716)]
+da_6 <- datax[,50001:58716]
+da_1 <- da_1 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+da_2 <- da_2 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+da_3 <- da_3 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+da_4 <- da_4 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+da_5 <- da_5 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+da_6 <- da_6 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+
+
+## Pericentral
+#filter out genes with low accessibility (maximum mean < 0.25)
+index_keep <- c()
+for (i in 1:length(data)) {
+    if (max(data[,i]) < 0.25) {
+        next
+    } else {
+        index_keep <- append(index_keep,i)
+    }}
+int_data <- data[,index_keep]
+
+#require mean(bin9+10) < mean(bin1+2)
+index_keep <- c()
+for (i in 1:length(int_data)) {
+    if (((int_data[1,i] + int_data[2,i])/2) > ((int_data[9,i] + int_data[10,i])/2)){
+        index_keep <- c(index_keep,i)
+    }}
+int_data <- int_data[,index_keep]
+#Calculate moving average & require decrease every time with 2 exceptions
+library(zoo)
+mov_avg <- rollmeanr(int_data,3)
+index_keep <- c()
+
+for (i in 1:ncol(mov_avg)){
+    for (x in 1:8){
+        #if first bin, set avg value
+        if (x == 1){ 
+            avg <- mov_avg[x,i]
+            exceptions <-  2
+        if (exceptions < 0) {break}
+        #if not, check if moving average decreases. If it doesn't, substract from exception    
+        } else {
+            if (avg > mov_avg[x,i]){
+                avg <- mov_avg[x,i]
+                next
+            } else {
+                avg <- mov_avg[x,i]
+                exceptions <- exceptions -1
+            }
+        }
+    }
+    if (exceptions < 0) { 
+        next
+    } else {
+        index_keep <- c(index_keep, i)
+}}
+int_data <- int_data[,index_keep]
+
+#Divide each column by its maximum to have values from 1 to zero
+for (i in 1:length(int_data)) {
+    int_data[,i] <- int_data[,i] / max(int_data[,i])}
+int_data$Bins <- c(1:10)
+atac_pericentral_data <- int_data 
+
+## Periportal
+#filter out peaks with low accessibility (maximum mean < 0.25)
+index_keep <- c()
+for (i in 1:length(data)) {
+    if (max(data[,i]) < 0.25) {
+        next
+    } else {
+        index_keep <- append(index_keep,i)
+    }}
+int_data <- data[,index_keep]
+
+#require mean(bin9+10) > mean(bin1+2)
+index_keep <- c()
+for (i in 1:length(int_data)) {
+    if (((int_data[1,i] + int_data[2,i])/2) < ((int_data[9,i] + int_data[10,i])/2)){
+        index_keep <- c(index_keep,i)
+    }}
+int_data <- int_data[,index_keep]
+#Calculate moving average & require decrease every time with 2 exceptions
+library(zoo)
+mov_avg <- rollmeanr(int_data,3)
+index_keep <- c()
+
+for (i in 1:ncol(mov_avg)){
+    for (x in 1:8){
+        #if first bin, set avg value
+        if (x == 1){ 
+            avg <- mov_avg[x,i]
+            exceptions <-  2
+        if (exceptions < 0) {break}
+        #if not, check if moving average increases If it doesn't, substract from exception    
+        } else {
+            if (avg < mov_avg[x,i]){
+                avg <- mov_avg[x,i]
+                next
+            } else {
+                avg <- mov_avg[x,i]
+                exceptions <- exceptions -1
+            }
+        }
+    }
+    if (exceptions < 0) { 
+        next
+    } else {
+        index_keep <- c(index_keep, i)
+}}
+int_data <- int_data[,index_keep]
+
+#Divide each column by its maximum to have values from 1 to zero
+for (i in 1:ncol(int_data)) {
+    int_data[,i] <- int_data[,i] / max(int_data[,i])}
+int_data <- int_data[-c(2)]
+atac_periportal_data <- int_data 
+
+
+## Final Novel Sets
+
+plot_atac_port <- melt(atac_periportal_data, id.vars="Bins")
+plot_atac_cent <- melt(atac_pericentral_data, id.vars="Bins")
+plot_rna_port <- melt(rna_periportal_data, id.vars="Bins")
+plot_rna_cent <- melt(rna_pericentral_data, id.vars="Bins")
 
 
 
