@@ -51,7 +51,7 @@ M083_1_BL6_F_Liv <- sparse_m
 load("./M084_3.Robject")
 M084_3_BL6_F_Liv <- sparse_m
 
-#This is a vector of the R object names, e.g. M002_1_BL6_M_Liv, M007_1_BL6_M_Liv etc.
+#This is a vector of the R object names, e.g. M002_1_BL6_M_Liv, M007_1_BL6_M_Liv etc. Must be in the same order as the Liver_Samples list below!
 liver.list <- read.table("./RNA_files/liver.list",header=F)
 liver.list <- list(liver.list$V1)
 
