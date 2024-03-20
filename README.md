@@ -1,6 +1,8 @@
 # easySHARE_seq
 This repository contains scripts used in https://doi.org/10.1101/2024.02.26.581705
 
+All data including processed single-cell matrices and accompanying files can be accessed under GEO accession GSE256434.
+
 Communications should be sent to volker.soltys@gmx.de
 
 Analysis steps in order:
