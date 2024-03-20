@@ -18,25 +18,25 @@ Analysis steps in order:
 
 Software Versions:
 
-bwa v.0.7.17
-samtools v.1.16.1
-featureCounts v.2.0.1
-UMItools v.1.1.2
+bwa v.0.7.17 
+samtools v.1.16.1 
+featureCounts v.2.0.1 
+UMItools v.1.1.2 
 STAR v.2.7.9a 
-cutadapt v.4.0  
-PicardTools v.2.18.25
-macs2 v.2.2.7.1
+cutadapt v.4.0   
+PicardTools v.2.18.25 
+macs2 v.2.2.7.1 
 
 R (v4.3.1) package Versions:
 
 Seurat v. 5.0.1 
-Signac v.1.12.9  
-chromVAR v.1.12
-GenomicRanges v.1.52.1
-BSgenome.Mmusculus.UCSC.mm10 v.1.4.0
-ChIPpeakAnno v.3.34.1
-monocle v.2.22
-ggplot2 v3.4.4
-reshape2 v1.4.4
-dplyr v1.1.4
-clusterProfiler v3.18.1
+Signac v.1.12.9 
+chromVAR v.1.12 
+GenomicRanges v.1.52.1 
+BSgenome.Mmusculus.UCSC.mm10 v.1.4.0 
+ChIPpeakAnno v.3.34.1 
+monocle v.2.22 
+ggplot2 v3.4.4 
+reshape2 v1.4.4 
+dplyr v1.1.4 
+clusterProfiler v3.18.1 
