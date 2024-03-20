@@ -17,6 +17,7 @@ Analysis steps in order:
 
 
 Software Versions:
+
 bwa v.0.7.17
 samtools v.1.16.1
 featureCounts v.2.0.1
@@ -27,6 +28,7 @@ PicardTools v.2.18.25
 macs2 v.2.2.7.1
 
 R (v4.3.1) package Versions:
+
 Seurat v. 5.0.1 
 Signac v.1.12.9  
 chromVAR v.1.12
