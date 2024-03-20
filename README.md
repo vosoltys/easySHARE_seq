@@ -1,5 +1,5 @@
 # easySHARE_seq
-This repository contains scripts used in [DOIXXXXXXX](https://doi.org/10.1101/2024.02.26.581705)
+This repository contains scripts used in https://doi.org/10.1101/2024.02.26.581705
 
 Communications should be sent to volker.soltys@gmx.de
 
