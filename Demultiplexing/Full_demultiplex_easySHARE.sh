@@ -26,7 +26,7 @@ echo "Splitting files..."
 
 mkdir $main_dir/split
 
-cp /fml/chones/projects/PC060_scCREs/Scripts/split.sh $main_dir
+cp $main_dir/Scripts/split.sh $main_dir
 qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_R1_001.fastq.gz" $main_dir/split/$fbname"_R1_001.fastq.gz_"
 qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_R2_001.fastq.gz" $main_dir/split/$fbname"_R2_001.fastq.gz_"
 qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_I1_001.fastq.gz" $main_dir/split/$fbname"_I1_001.fastq.gz_"
@@ -36,7 +36,7 @@ cluster_act=$(qstat -u $USER);
 until [[ "$cluster_act" == "" ]]; do echo "Waiting for cluster job to finish.."; sleep 50; cluster_act=$(qstat -u $USER); done
 echo "Splitting done, starting to zip them...";
 
-mv $main/dir/split.* $main_dir/split
+mv $main_dir/split.* $main_dir/split
 
 #Rename the split files
 ls -ltrh $main_dir/split | grep $fbname"_I2_001.fastq.gz_" | wc -l | awk '{print $1-1}' > $main_dir/number;
@@ -51,7 +51,7 @@ for i in `seq 0 $var`; do pi=`printf %02d $i`; mv $main_dir/split/$fbname"_I2_00
 echo "Generated "$var+1" files per fastq";
 echo "Splitting done, starting to zip the split files...";
 
-cp /fml/chones/projects/PC060_scCREs/Scripts/bgzip.sge.sh $main_dir;
+cp $main_dir/Scripts/bgzip.sge.sh $main_dir;
 for i in `seq 0 $var`; do pi=`printf %02d $i`;qsub $main_dir/bgzip.sge.sh $main_dir/split/"Split_"$pi"_"$fbname"_R1_001.fastq";done;
 for i in `seq 0 $var`; do pi=`printf %02d $i`;qsub $main_dir/bgzip.sge.sh $main_dir/split/"Split_"$pi"_"$fbname"_R2_001.fastq";done;
 for i in `seq 0 $var`; do pi=`printf %02d $i`;qsub $main_dir/bgzip.sge.sh $main_dir/split/"Split_"$pi"_"$fbname"_I1_001.fastq";done;
@@ -64,13 +64,12 @@ echo "Zipping done, starting to place Barcodes...";
 mv $main_dir/bgzip* $main_dir/split
 
 #Place BCs with Script
-
-cp /fml/chones/projects/PC060_scCREs/Scripts/SHARE_Cluster_demult.sh $main_dir;
+cp $main_dir/Scripts/SHARE_Cluster_demult.sh $main_dir;
 mkdir $main_dir/Demux;
 
 #Caution: One of the files (BC_D.txt) does not exist in /fml/chones/projects/PC060_scCREs/Scripts. Needs to be done beforehand!
 
-for i in `seq 0 $var`; do pi=`printf %02d $i`; qsub $main_dir/SHARE_Cluster_demult.sh $main_dir/split/Split_${pi}"_"$fbname"_" $main_dir/Demux/"Demux_Split_"${pi}"_"$fbname;done;
+for i in `seq 0 $var`; do pi=`printf %02d $i`; qsub $main_dir/SHARE_Cluster_demult.sh $main_dir/split/Split_${pi}"_"$fbname"_" $main_dir/Demux/"Demux_Split_"${pi}"_"$fbname $main_dir;done;
 
 cluster_act=$(qstat -u $USER);
 until [[ "$cluster_act" == "" ]]; do echo "Waiting for cluster job to finish.."; sleep 50; cluster_act=$(qstat -u $USER); done
@@ -80,7 +79,7 @@ mv $main_dir/BC_* $main_dir/Demux/
 echo "Placing Barcodes done, starting to cutadapt...";
 
 #Run cutadapt on resulting files
-cp /fml/chones/projects/PC060_scCREs/Scripts/cutadapt.sh $main_dir;
+cp $main_dir/Scripts/cutadapt.sh $main_dir;
 mkdir $main_dir/cutadapt;
 
 for i in `seq 0 $var`; do pi=`printf %02d $i`; qsub $main_dir/cutadapt.sh $main_dir/Demux/"Demux_Split_"${pi}"_"$fbname"_R1_001.fastq.gz" $main_dir/Demux/"Demux_Split_"${pi}"_"$fbname"_R2_001.fastq.gz";done;
@@ -95,8 +94,8 @@ mv $main_dir/Demux/*tooshort* $main_dir/cutadapt;
 echo "Done with cutadapt... starting to split by i5 indices";
 
 #Split by i5 index
-cp /fml/chones/projects/PC060_scCREs/Scripts/Index1Split.sh $main_dir;
-cp /fml/chones/projects/PC060_scCREs/Scripts/Index2Split.sh $main_dir;
+cp $main_dir/Scripts/Index1Split.sh $main_dir;
+cp $main_dir/Scripts/Index2Split.sh $main_dir;
 
 
 for i in `seq 0 65`; do pi=`printf %02d $i`; qsub ./Index1Split.sh /fml/obi/data/PC060_scCREs/Raw_Reads/Pool_1 $pi $fbname; done
@@ -121,13 +120,14 @@ echo "All files are split according to i5 index...Deleting intermediate files"
 mv $main_dir/Index* $main_dir/cutadapt
 
 #Need to delete all files in between
-#also possible to delete in between, figure it out!
+#also possible to delete in between
 
 #split files from before placing BCs " $main_dir/split/"Split_"$pi"_"$fbname"_R1_001.fastq"
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/split/"Split_"$pi"_"$fbname"_R1_001.fastq.gz"; done;
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/split/"Split_"$pi"_"$fbname"_R2_001.fastq.gz"; done;
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/split/"Split_"$pi"_"$fbname"_I1_001.fastq.gz"; done;
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/split/"Split_"$pi"_"$fbname"_I2_001.fastq.gz"; done;
+
 #cutadapted files AFTER placing BCs
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/cutadapt/"Demux_Split_"${pi}"_"$fbname"_R1_001.fastq.gz.cutadapt"; done;
 #for i in `seq 0 $var`; do pi=`printf %02d $i`; rm $main_dir/cutadapt/"Demux_Split_"${pi}"_"$fbname"_R2_001.fastq.gz.cutadapt"; done;
