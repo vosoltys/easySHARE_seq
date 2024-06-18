@@ -1,10 +1,10 @@
-*                                          
+/*                                          
  * variant_file.cpp
  *
  *  Created on: Jan 28, 2019
  *      Authors: Andreea Dreau, https://github.com/adreau
  *               Frank Chan, https://github.com/evolgenomics
- *
+ */
 
 #include <iostream>
 #include <fstream>
