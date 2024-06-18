@@ -32,10 +32,12 @@ qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_R2_001.fastq.gz" $main_dir/spl
 qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_I1_001.fastq.gz" $main_dir/split/$fbname"_I1_001.fastq.gz_"
 qsub $main_dir/split.sh $main_dir/fastqs/$fbname"_I2_001.fastq.gz" $main_dir/split/$fbname"_I2_001.fastq.gz_"
 
+#these 2 lines make the script wait until all scripts have run on the cluster. Not necessary when running scripts locally.
 cluster_act=$(qstat -u $USER);
 until [[ "$cluster_act" == "" ]]; do echo "Waiting for cluster job to finish.."; sleep 50; cluster_act=$(qstat -u $USER); done
-echo "Splitting done, starting to zip them...";
 
+
+echo "Splitting done, starting to zip them...";
 mv $main_dir/split.* $main_dir/split
 
 #Rename the split files
