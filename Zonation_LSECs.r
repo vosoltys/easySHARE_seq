@@ -1,6 +1,7 @@
 library(Seurat)
 library(Signac)
 library(dplyr)
+library(GenomicRanges)
 library(rtracklayer)
 library(SeuratWrappers)
 library(Matrix)
@@ -11,15 +12,49 @@ library(gridExtra)
 library(tidyverse)
 library(future)
 library(gprofiler2)
+library(gridExtra)
+library(SummarizedExperiment)
+library(chromVAR)
 library(matrixStats)
 library(ChIPpeakAnno)
+library(BSDA)
+library(monocle3)
 
+#object with RNA and ATAC-seq already integrated.
 load("Liver_WNN_broad_annotated.RObject") 
 Liver_subset <- subset(Liver_WNN_broad, subset= CellType =="LSECs")
 
+#add coordinates as variables and remove a few outlier cells [61]
+umapCoord <- as.data.frame(Embeddings(object = Liver_subset[["wnn.umap"]]))
+Liver_subset$wnn_1 <- umapCoord$wnnUMAP_1
+Liver_subset$wnn_2 <- umapCoord$wnnUMAP_2
+Liver_subset$umap_2 <- as.data.frame(Embeddings(object = Liver_subset[["umap"]]))[,2]
+Liver_subset <- subset(x = Liver_subset, subset = wnn_1 > 6)
+UpdateSeuratObject(Liver_subset)
 
-#Pulling out & binning RNA data
+
+#Start Pseudotime analysis
+cds <- as.cell_data_set(Liver_subset, assay=NULL)
+cds <- cluster_cells(cds, reduction_method='UMAP')
+cds <- learn_graph(cds,use_partition=FALSE,learn_graph_control= list(nn.k=16))
+#set the root cells
+max.wnt2 <- which.max(unlist(FetchData(Liver_subset, "Wnt2")))
+max.wnt2 <- colnames(Liver_subset)[max.wnt2]
+cds <- order_cells(cds, root_cells = max.wnt2)
+mcols(cds@rowRanges)$gene_short_name <- rownames(cds)
+traj.coord <- cds@principal_graph_aux@listData[["UMAP"]][["pseudotime"]]
+
+
+#add pseudotime back to Seurat
+# 2 cells are outliers with pseudotime ~10, all others are below 5. Filter them out
+Liver_subset$pseudotime <- traj.coord
+Liver_subset <- subset(x = Liver_subset, subset =umap_2 < 3)
+FeaturePlot(Liver_subset, "pseudotime", reduction='wnn.umap')
+plot_cells(cds, show_trajectory_graph = TRUE)
+
+#gene expression of individual markers along pseudotime
 rna_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+rna_coords$pseudotime <- Liver_subset$pseudotime
 data <- Liver_subset@assays$RNA@data
 
 wnt2 <- as.numeric(unlist(data["Wnt2",]))
@@ -35,6 +70,14 @@ pear1 <- as.numeric(unlist(data["Pear1",]))
 lama4 <- as.numeric(unlist(data["Lama4",]))
 thbd <- as.numeric(unlist(data["Thbd",]))
 dkk3 <- as.numeric(unlist(data["Dkk3",]))
+fabp4 <- as.numeric(unlist(data["Fabp4",]))
+jak1 <- as.numeric(unlist(data["Jak1",]))
+nkd1 <- as.numeric(unlist(data["Nkd1",]))
+fmn1 <- as.numeric(unlist(data["Fmn1",]))
+flrt1 <- as.numeric(unlist(data["Flrt1",]))
+olfm1 <- as.numeric(unlist(data["Olfm1",]))
+tmed8 <- as.numeric(unlist(data["Tmed8",]))
+itprip <- as.numeric(unlist(data["Ptgs1",]))
 
 rna_coords$Efnb2 <- efnb2
 rna_coords$Ltbp4 <- ltbp4
@@ -49,30 +92,20 @@ rna_coords$wnt9 <- wnt9
 rna_coords$lama4 <- lama4
 rna_coords$thbd <- thbd
 rna_coords$dkk3 <- dkk3
+rna_coords$fabp4 <- fabp4
+rna_coords$jak1 <- jak1
+rna_coords$nkd1 <- nkd1
+rna_coords$fmn1 <- fmn1
+rna_coords$flrt1 <- flrt1
+rna_coords$olfm1 <- olfm1
+rna_coords$tmed8 <- tmed8
+rna_coords$itprip <- itprip
+rna_coords <- rna_coords[order(rna_coords$pseudotime),]
 
-rna_coords <- rna_coords[order(rna_coords$wnnUMAP_2),]
-
-rna_efnb2 <- rna_coords[,1:3] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Efnb2 > 0) %>% mutate(m_efnb2 = mean(Efnb2), sd_efnb2 = sd(Efnb2))
-rna_ltbp4 <- rna_coords[,c(1,2,4)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Ltbp4 > 0) %>% mutate(m_Ltbp4 = mean(Ltbp4), sd_Ltbp4 = sd(Ltbp4))
-rna_rspo3 <- rna_coords[,c(1,2,5)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Rspo3 > 0) %>% mutate(m_rspo3 = mean(Rspo3), sd_rspo3 = sd(Rspo3))
-rna_lyve1 <- rna_coords[,c(1,2,6)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Lyve1 > 0) %>% mutate(m_Lyve1 = mean(Lyve1), sd_Lyve1 = sd(Lyve1))
-rna_wnt2 <- rna_coords[,c(1,2,7)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(wnt2 > 0) %>% mutate(m_wnt2 = mean(wnt2), sd_wnt2 = sd(wnt2))
-rna_kit <- rna_coords[,c(1,2,8)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Kit > 0) %>% mutate(m_Kit = mean(Kit), sd_Kit = sd(Kit))
-rna_bmp2 <- rna_coords[,c(1,2,9)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Bmp2 > 0) %>% mutate(m_Bmp2 = mean(Bmp2), sd_Bmp2 = sd(Bmp2))
-rna_meis1 <- rna_coords[,c(1,2,10)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Meis1 > 0) %>% mutate(m_Meis1 = mean(Meis1), sd_Meis1 = sd(Meis1))
-rna_pear1 <- rna_coords[,c(1,2,11)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(Pear1 > 0) %>% mutate(m_Pear1 = mean(Pear1), sd_Pear1 = sd(Pear1))
-rna_wnt9 <- rna_coords[,c(1,2,12)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(wnt9 > 0) %>% mutate(m_wnt9 = mean(wnt9), sd_wnt9 = sd(wnt9))
-rna_lama4 <- rna_coords[,c(1,2,13)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(lama4 > 0) %>% mutate(m_lama4 = mean(lama4), sd_lama4 = sd(lama4))
-rna_thbd <- rna_coords[,c(1,2,14)] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(thbd > 0) %>% mutate(m_thbd = mean(thbd), sd_thbd = sd(thbd))
-rna_dkk3 <- rna_coords[,1:3] %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% dplyr::filter(dkk3 > 0) %>% mutate(m_dkk3 = mean(dkk3), sd_dkk3 = sd(dkk3))
-
-rna_binned_mean <- rna_coords %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% mutate(m_efnb2 = mean(Efnb2), sd_efnb2 = sd(Efnb2), m_Ltbp4 = mean(Ltbp4), sd_Ltbp4 = sd(Ltbp4), m_rspo3 = mean(Rspo3), sd_rspo3 = sd(Rspo3), m_Lyve1 = mean(Lyve1), sd_Lyve1 = sd(Lyve1), m_wnt2 = mean(wnt2), sd_wnt2 = sd(wnt2), m_Kit = mean(Kit), sd_Kit = sd(Kit), m_Bmp2 = mean(Bmp2), sd_Bmp2 = sd(Bmp2), m_Meis1 = mean(Meis1), sd_Meis1 = sd(Meis1), m_Pear1 = mean(Pear1), sd_Pear1 = sd(Pear1), m_wnt9 = mean(wnt9), sd_wnt9 = sd(wnt9), m_lama4 = mean(lama4), sd_lama4 = sd(lama4),m_thbd = mean(thbd), sd_thbd = sd(thbd))
-
-
-# Pulling out & binning ATAC-seq data
+#accessibility of individual peaks along pseudotime
 DefaultAssay(Liver_subset) <- "ATAC"
-
 atac_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+atac_coords$pseudotime <- Liver_subset$pseudotime
 data <- Liver_subset@assays$ATAC@data
 
 wnt2_end <- as.numeric(unlist(data["chr6-17991462-17991911",]))
@@ -86,7 +119,9 @@ efnb2_prom <- as.numeric(unlist(data["chr8-8660841-8662085",]))
 lama4_prom <- as.numeric(unlist(data["chr10-38965164-38965990",]))
 meis1_int <- as.numeric(unlist(data["chr11-19007769-19008171",]))
 meis1_prom <- as.numeric(unlist(data["chr11-19018439-19020880",]))
-lyve1_int <- as.numeric(unlist(data["chr7-110862706-110863248",]))
+lyve1_prom <- as.numeric(unlist(data["chr7-110862706-110863248",]))
+lyve1_int <- as.numeric(unlist(data["chr7-110860211-110860407",]))
+lyve1_int2 <- as.numeric(unlist(data["chr7-110853672-110855790",]))
 klf4_prom <- as.numeric(unlist(data["chr4-55532450-55533288",]))
 jak1_prom <- as.numeric(unlist(data["chr4-101275456-101276779",]))
 ltbp4_int <- as.numeric(unlist(data["chr7-27325703-27326369",]))
@@ -94,9 +129,17 @@ ltbp4_int2 <- as.numeric(unlist(data["chr7-27330856-27331432",]))
 pear1_int1 <- as.numeric(unlist(data["chr3-87764893-87765440",]))
 pear1_int2 <- as.numeric(unlist(data["chr3-87770496-87771366",]))
 kit_prom <- as.numeric(unlist(data["chr5-75574893-75575195",]))
+kit_prom2 <- as.numeric(unlist(data["chr5-75575541-75575930",]))
 rspo3_prom <- as.numeric(unlist(data["chr10-29532964-29533569",]))
 thbd_prom <- as.numeric(unlist(data["chr2-148409074-148409577",]))
 dkk3_int <- as.numeric(unlist(data["chr7-112138555-112139266",]))
+dkk3_int2 <- as.numeric(unlist(data["chr7-112120964-112121300",]))
+nkd1_int <- as.numeric(unlist(data["chr8-88561623-88561730",]))
+fabp4_int <- as.numeric(unlist(data["chr3-10211267-10212179",]))
+jak1_prom <- as.numeric(unlist(data["chr4-101264353-101265597",]))
+jak1_int <- as.numeric(unlist(data["chr4-101175960-101176905",]))
+olfm1_int <- as.numeric(unlist(data["chr2-28211865-28212033",]))
+tmed8_int <- as.numeric(unlist(data["chr12-87199460-87200724",]))
 
 atac_coords$wnt2_end <- wnt2_end
 atac_coords$wnt2_prom_1 <- wnt2_prom_1
@@ -110,6 +153,8 @@ atac_coords$lama4_prom <- lama4_prom
 atac_coords$meis1_int <- meis1_int
 atac_coords$meis1_prom <- meis1_prom
 atac_coords$lyve1_int <- lyve1_int
+atac_coords$lyve1_int2 <- lyve1_int2
+atac_coords$lyve1_prom <- lyve1_prom
 atac_coords$klf4_prom <- klf4_prom
 atac_coords$jak1_prom <- jak1_prom
 atac_coords$ltbp4_int <- ltbp4_int
@@ -117,37 +162,30 @@ atac_coords$ltbp4_int2 <- ltbp4_int2
 atac_coords$pear1_int1 <- pear1_int1
 atac_coords$pear1_int2 <- pear1_int2
 atac_coords$kit_prom <-kit_prom
+atac_coords$kit_prom2 <-kit_prom2
 atac_coords$rspo3_prom <-rspo3_prom
 atac_coords$thbd_prom <- thbd_prom
 atac_coords$dkk3_int <- dkk3_int
+atac_coords$dkk3_int2 <- dkk3_int2
+atac_coords$nkd1_int <- nkd1_int
+atac_coords$fabp4_int <- fabp4_int
+atac_coords$jak1_prom <- jak1_prom
+atac_coords$jak1_int <- jak1_int
+atac_coords$olfm1_int <- olfm1_int
+atac_coords$tmed8_int <- tmed8_int
 
 
-atac_coords <- atac_coords %>% dplyr::filter(wnnUMAP_1 > 5 )
-atac_coords <- atac_coords[order(atac_coords$wnnUMAP_2),]
+## Identification of novel markers 
 
-#This line of code gets rid of all cells that contain 0 data across all peaks we look at, which is ~2/3rds of cells
-#Not sure if this is fair - in ATACseq no data can mean closed chromatin
-atac_coords <- atac_coords[rowSums(atac_coords[3:18])>0,]
-
-atac_binned_mean <- atac_coords %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, labels=FALSE)) %>% group_by(Bins) %>% mutate(m_wnt2_end = mean(wnt2_end), m_wnt2_prom_1 = mean(wnt2_prom_1),m_wnt2_prom_2 = mean(wnt2_prom_2),m_wnt9b_end = mean(wnt9b_end),m_wnt9b_int = mean(wnt9b_int),m_bmp2_up = mean(bmp2_up),m_bmp2_prom = mean(bmp2_prom),m_efnb2_prom = mean(efnb2_prom),m_lama4_prom = mean(lama4_prom), m_meis1_prom = mean(meis1_prom),m_meis1_int = mean(meis1_int),m_lyve1_int = mean(lyve1_int),m_klf4_prom = mean(klf4_prom),m_jak1_prom = mean(jak1_prom), m_ltbp4_int = mean(ltbp4_int),m_ltbp4_int2 = mean(ltbp4_int2),m_pear1_int1 = mean(pear1_int1),m_pear1_int2 = mean(pear1_int2),m_kit_prom = mean(kit_prom), m_rspo3_prom = mean(rspo3_prom),m_rspo3_prom = mean(rspo3_prom),m_thbd_prom = mean(thbd_prom),m_dkk3_int = mean(dkk3_int))   
-
-
-#example plot
-ggplot(rna_binned_mean,aes(x=as.integer(Bins), y=m_wnt2)) + geom_point() + theme_classic() + ggtitle("Wnt2") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Mean Expression") + geom_line() + geom_smooth(aes(x=as.integer(Bins),y=m_wnt2,color=m_wnt2,fill=m_wnt2),method=loess) + theme(legend.position="none")
-ggplot(atac_binned_mean,aes(x=Bins, y=m_wnt2_end)) + geom_point() + theme_classic() + ggtitle("Wnt2_int") + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + ylab("Mean Accessibility") + geom_line() + geom_smooth(aes(x=as.integer(Bins),y=m_wnt2_end,color="red",fill=m_wnt2_end),method=loess)+ theme(legend.position="none")
-
-
-
-
-## Identification of novel marker genes
-
+#RNA-seq
+library(zoo)
 rna_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+rna_coords$pseudotime <- Liver_subset$pseudotime
 data <- Liver_subset@assays$RNA@data
 data <- cbind(rna_coords, t(data))
-data <- data %>% dplyr::filter(wnnUMAP_1 > 5 )
-data <- data[order(data$wnnUMAP_2),]
-#bin data and calculate mean per bin across every gene
-data <- data %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE)) %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
+data <- data[order(data$pseudotime),]
+#bin data along pseudotime and calculate mean per bin across every gene
+data <- data %>% mutate(Bins = cut(pseudotime, breaks=10, label=FALSE)) %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
 
 ## Pericentral
 #filter out genes with low expression (maximum mean < 0.25)
@@ -169,7 +207,6 @@ for (i in 1:length(int_data)) {
 int_data <- int_data[,index_keep]
 
 #Calculate moving average & require decrease every time with 2 exceptions
-library(zoo)
 mov_avg <- rollmeanr(int_data,3)
 index_keep <- c()
 
@@ -202,7 +239,7 @@ int_data <- int_data[,index_keep]
 for (i in 1:length(int_data)) {
     int_data[,i] <- int_data[,i] / max(int_data[,i])}
 int_data$Bins <- c(1:10)
-rna_pericentral_data <- int_data 
+pericentral_data <- int_data 
 
 ## Periportal
 #filter out genes with low expression (maximum mean < 0.25)
@@ -222,7 +259,6 @@ for (i in 1:length(int_data)) {
         index_keep <- c(index_keep,i)
     }}
 int_data <- int_data[,index_keep]
-
 #Calculate moving average & require decrease every time with 2 exceptions
 library(zoo)
 mov_avg <- rollmeanr(int_data,3)
@@ -233,7 +269,7 @@ for (i in 1:ncol(mov_avg)){
         #if first bin, set avg value
         if (x == 1){ 
             avg <- mov_avg[x,i]
-            exceptions <-  2
+            exceptions <-  1
         if (exceptions < 0) {break}
         #if not, check if moving average increases If it doesn't, substract from exception    
         } else {
@@ -257,15 +293,15 @@ int_data <- int_data[,index_keep]
 for (i in 1:ncol(int_data)) {
     int_data[,i] <- int_data[,i] / max(int_data[,i])}
 int_data <- int_data[-c(2)]
-rna_periportal_data <- int_data 
+periportal_data <- int_data 
 
-## Identification of cis-elements displaying zonation
-
+#ATAC-seq
 DefaultAssay(Liver_subset) <- "ATAC"
 atac_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
+atac_coords$pseudotime <- Liver_subset$pseudotime
 datax <- as.data.frame(Liver_subset@assays$ATAC@data)
 datax <- cbind(atac_coords, t(datax))
-datax <- datax %>% dplyr::filter(wnnUMAP_1 > 5 )
+datax <- datax[order(datax$pseudotime),]
 
 #filter out peaks with no data
 index_keep <- c()
@@ -277,27 +313,15 @@ for (i in 1:ncol(datax)){
     }
 }
 datax <- datax[,index_keep]
-datax <- datax[order(datax$wnnUMAP_2),]
+datax <- datax[order(datax$pseudotime),]
 
-#bin data and calculate mean per bin across every peak
-datax <- datax %>% mutate(Bins = cut(wnnUMAP_2, breaks=10, label=FALSE))
-#split up makes it quicker...
-da_1 <- datax[,c(1:10000,58716)]
-da_2 <- datax[,c(10001:20000,58716)]
-da_3 <- datax[,c(20001:30000,58716)]
-da_4 <- datax[,c(30001:40000,58716)]
-da_5 <- datax[,c(40001:50000,58716)]
-da_6 <- datax[,50001:58716]
-da_1 <- da_1 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-da_2 <- da_2 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-da_3 <- da_3 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-da_4 <- da_4 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-da_5 <- da_5 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-da_6 <- da_6 %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
-
+#bin data and calculate mean per bin across every gene
+datax$Bins <- as.numeric(cut_number(datax$pseudotime, 10))
+#datax %>% mutate(Bins = cut(pseudotime, breaks=10, label=FALSE))
+data <- datax %>% group_by(Bins) %>% summarise(across(everything(), list(mean)))
 
 ## Pericentral
-#filter out genes with low accessibility (maximum mean < 0.25)
+#filter out peaks with low accessibility (maximum mean < 0.25)
 index_keep <- c()
 for (i in 1:length(data)) {
     if (max(data[,i]) < 0.25) {
@@ -314,8 +338,8 @@ for (i in 1:length(int_data)) {
         index_keep <- c(index_keep,i)
     }}
 int_data <- int_data[,index_keep]
+
 #Calculate moving average & require decrease every time with 2 exceptions
-library(zoo)
 mov_avg <- rollmeanr(int_data,3)
 index_keep <- c()
 
@@ -324,7 +348,7 @@ for (i in 1:ncol(mov_avg)){
         #if first bin, set avg value
         if (x == 1){ 
             avg <- mov_avg[x,i]
-            exceptions <-  2
+            exceptions <-  1
         if (exceptions < 0) {break}
         #if not, check if moving average decreases. If it doesn't, substract from exception    
         } else {
@@ -351,7 +375,7 @@ int_data$Bins <- c(1:10)
 atac_pericentral_data <- int_data 
 
 ## Periportal
-#filter out peaks with low accessibility (maximum mean < 0.25)
+#filter out genes with low expression (maximum mean < 0.25)
 index_keep <- c()
 for (i in 1:length(data)) {
     if (max(data[,i]) < 0.25) {
@@ -378,7 +402,7 @@ for (i in 1:ncol(mov_avg)){
         #if first bin, set avg value
         if (x == 1){ 
             avg <- mov_avg[x,i]
-            exceptions <-  2
+            exceptions <-  1
         if (exceptions < 0) {break}
         #if not, check if moving average increases If it doesn't, substract from exception    
         } else {
@@ -404,37 +428,17 @@ for (i in 1:ncol(int_data)) {
 int_data <- int_data[-c(2)]
 atac_periportal_data <- int_data 
 
+rna_periportal_data <- periportal_data
+rna_pericentral_data <- pericentral_data
 
-## Final Novel Sets
 
+#Plotting
 plot_atac_port <- melt(atac_periportal_data, id.vars="Bins")
 plot_atac_cent <- melt(atac_pericentral_data, id.vars="Bins")
 plot_rna_port <- melt(rna_periportal_data, id.vars="Bins")
 plot_rna_cent <- melt(rna_pericentral_data, id.vars="Bins")
 
-
-
-## Pseudotime ordering & plotting
-cds <- as.cell_data_set(Liver_subset, assay=NULL)
-cds <- cluster_cells(cds, reduction_method=WNN.UMAP)
-cds <- learn_graph(cds,use_partition=FALSE,learn_graph_control= list(nn.k=16))
-#Set the root cells
-max.wnt2 <- which.max(unlist(FetchData(Liver_subset, "Wnt2")))
-max.wnt2 <- colnames(Liver_subset)[max.wnt2]
-cds <- order_cells(cds, root_cells = max.wnt2)
-mcols(cds@rowRanges)$gene_short_name <- rownames(cds)
-traj.coord <- cds@principal_graph_aux@listData[["UMAP"]][["pseudotime"]]
-
-#add pseudotime back to Seurat
-Liver_subset$pseudotime <- traj.coord
-FeaturePlot(Liver_subset, "pseudotime", reduction='wnn.umap')
-
-rna_coords <- as.data.frame(Liver_subset@reductions$wnn.umap@cell.embeddings)
-rna_coords$pseudotime <- Liver_subset$pseudotime
-data <- Liver_subset@assays$RNA@data
-wnt2 <- as.numeric(unlist(data["Wnt2",]))
-rna_coords$wnt2 <- wnt2
-
-ggplot(rna_coords) + geom_point(aes(x=wnnUMAP_1, y=wnnUMAP_2, color=pseudotime), size=0.8) + scale_colour_viridis_c(option="plasma") + theme_classic()
-ggplot(rna_coords,aes(x=pseudotime, y=wnt2)) +  geom_smooth(method=loess) + theme_classic() + xlab("Pseudotime") + ggtitle("Wnt2")+ ylab("")
-
+ggplot(plot_rna_cent, aes(x=Bins, y=reorder(variable, -value), fill=value))  + geom_tile() + scale_fill_viridis_c() + theme(axis.text.y=element_blank(),axis.ticks.y=element_blank())
+ggplot(plot_rna_port, aes(x=Bins, y=reorder(variable, value), fill=value))  + geom_tile() + scale_fill_viridis_c() + theme(axis.text.y=element_blank(),axis.ticks.y=element_blank())
+ggplot(plot_atac_cent, aes(x=Bins, y=reorder(variable, -value), fill=value))  + geom_tile() + scale_fill_viridis_c() + theme(axis.text.y=element_blank(),axis.ticks.y=element_blank())
+ggplot(plot_atac_port, aes(x=Bins, y=reorder(variable, value), fill=value))  + geom_tile() + scale_fill_viridis_c() + theme(axis.text.y=element_blank(),axis.ticks.y=element_blank())
