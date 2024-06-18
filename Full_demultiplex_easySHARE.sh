@@ -9,10 +9,9 @@
 #$ -cwd
 
 if [ ! -e "/tmp/vsoltys" ];then mkdir /tmp/vsoltys;fi
-#Has to be started from congo, not cluster
-#Requirements: in main directory folder /fastqs with the undetermined fastqs (4 of them!)
+#Requirements: in main directory folder $main_dir/fastqs with the fastqs (4 of them!)
 #usage: ./Full... BASENAME_INPUT_FILE MAIN_DIRECTORY
-#example: ./Full_demultiplex_SHARE.sh Test.Undetermined_S0_L002 /fml/chones/projects/PC060_scCREs/Scripts/Work_in_progress
+#example: ./Full_demultiplex_easySHARE.sh Test.Undetermined_S0_L002 /fml/chones/projects/PC060_scCREs/Scripts/Work_in_progress
 
 input_file=$1;
 echo "Input files are : "$input_file
