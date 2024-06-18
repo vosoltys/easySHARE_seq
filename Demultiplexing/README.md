@@ -10,3 +10,9 @@ Important:
 - The SHARE_demult_fastq.cpp script needs to be compiled in the same folder beforehand, for example:
 
   g++ -O3 -o SHARE_demult_fastq.o SHARE_demult_fastq.cpp -lgzstream -I${GZSTREAM_INCLUDE} -L${GZSTREAM_LIB} -I/usr/include -std=gnu++11 -lz -Wall
+
+
+Afterwards, either Processing_RNA.sh or Processing_ATAC.sh, all dependencies are in ./Scripts.
+
+Important:
+- In the source scripts, the location of software such as cutadapt etc. needs to be changed to suit your environment
