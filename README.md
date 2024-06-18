@@ -6,7 +6,7 @@ All data including processed single-cell matrices and accompanying files can be 
 Communications should be sent to volker.soltys@gmx.de
 
 Analysis steps in order:
-- Full_demultiplex_pipeline in combination with SHARE_demult_fastq.c
+- Demultiplexing raw data
 - scRNA-seq_Seurat_Analysis.r
 - scATACseq_Signac_Analysis.r
 - scRNA_ATAC_integration.r
