@@ -61,6 +61,18 @@ new.cluster.ids <- c("Hepatocytes","Hepatocytes","Hepatocytes","Hepatocytes", "H
 names(new.cluster.ids) <- levels(Liver_WNN)
 Liver_WNN_broad <- RenameIdents(Liver_WNN, new.cluster.ids)
 
+#Ambient RNA detection and decontamination using decontX
+sce <- as.SingleCellExperiment(Liver_WNN_broad)
+sce <- decontX(sce, z=Liver_WNN_broad$CellType)
+
+#add back de-contaminated counts
+Liver_WNN_broad[["decontXcounts"]] <- CreateAssayObject(counts = decontXcounts(sce))
+
+#normalize them for plotting
+Liver_WNN_broad <- NormalizeData(object =Liver_WNN_broad,assay = 'decontXcounts',normalization.method = 'CLR',scale.factor = median(Liver_WNN_broad$nCount_decontXcounts))
+Liver_WNN_broad <- ScaleData(Liver_WNN_broad)
+DefaultAssay(Liver_WNN_broad) <- 'decontXcounts'
+
 #plot
 my_levels <- c("Cholangiocytes","Neurons","Monocytes","B_Cells","Kupffer_Cells","HSCs","LSECs","Hepatocytes")
 Idents(Liver_WNN_broad) <- factor(x = Idents(Liver_WNN_broad), levels = my_levels)
